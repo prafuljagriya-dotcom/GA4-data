@@ -1,10 +1,21 @@
 # Looker Studio Dashboard — Build Guide
 
-This guide builds the "Client Analytics Hub" manager dashboard in Looker Studio.
-Prerequisites: the Google Sheet must have data in both `GA4_Data` and `Mapping`
-tabs (complete SETUP.md Steps 1–10 first).
+This guide builds the 4-view manager dashboard. Prerequisites: the Google Sheet
+must have data in **GA4_Data**, **Mapping**, **Site Registry Master**, and
+**Alerts Log** tabs (complete SETUP.md first).
 
-Total time: ~30 minutes.
+Total build time: ~45 minutes.
+
+---
+
+## Dashboard overview
+
+| Page | Audience | Purpose |
+|------|----------|---------|
+| 1 — Executive Summary | VP / Manager | Portfolio-wide KPIs, owner roll-ups, date filter |
+| 2 — Individual Performance | Team leads | Per-site traffic and conversions table |
+| 3 — Alert Center | Everyone | Open alerts with severity filter |
+| 4 — Technical Health | DevOps | Uptime and SSL status from Alerts Log |
 
 ---
 
@@ -12,233 +23,281 @@ Total time: ~30 minutes.
 
 ### 1.1 Create a new report
 
-1. Open [lookerstudio.google.com](https://lookerstudio.google.com) signed in as
-   Praful.
+1. Open [lookerstudio.google.com](https://lookerstudio.google.com) signed in as Praful.
 2. Click **Create → Report**.
-3. An **"Add data to report"** panel opens on the right.
+3. The "Add data to report" panel opens.
 
-### 1.2 Add the GA4_Data source
+### 1.2 GA4_Data source
 
-1. In the panel, click the **Google Sheets** connector.
-2. Select the **Client Analytics Hub** spreadsheet.
-3. Select the **GA4_Data** tab.
-4. Make sure **"Use first row as headers"** is checked.
-5. Click **Add** (bottom-right).
-6. A dialog asks "Add to report?" — click **Add to report**.
+1. Click **Google Sheets**.
+2. Select **Client Analytics Hub** → **GA4_Data** tab.
+3. Check **"Use first row as headers"**.
+4. Click **Add → Add to report**.
 
-### 1.3 Add the Mapping source
+### 1.3 Site Registry Master source
 
-1. In the Looker Studio toolbar, click **Resource → Manage added data sources**.
-2. Click **Add a data source** (bottom-left of the panel).
-3. Click **Google Sheets** again.
-4. Select **Client Analytics Hub → Mapping tab**.
-5. Make sure **"Use first row as headers"** is checked.
-6. Click **Add**, then **Add to report**.
-7. Close the "Manage data sources" panel.
+1. Click **Resource → Manage added data sources → Add a data source → Google Sheets**.
+2. Select **Client Analytics Hub → Site Registry Master**.
+3. Check **"Use first row as headers"** → **Add → Done**.
 
----
+### 1.4 Alerts Log source
 
-## Part 2 — Create the blend
+1. Add another data source → **Google Sheets → Client Analytics Hub → Alerts Log**.
+2. Check headers → **Add → Done**.
 
-The blend joins GA4_Data + Mapping on PropertyID so every row carries Owner,
-Tier, Vertical, and PropertyName alongside the metrics.
-
-1. Click **Resource → Manage blends**.
-2. Click **Add a blend**.
-3. The blend builder opens with two "table" slots.
-
-**Left table (GA4_Data):**
-1. Click the **GA4_Data** source in the left table.
-2. Included fields: check `PropertyID`, `Date`, `Users`, `Sessions`, `Conversions`.
-
-**Right table (Mapping):**
-1. Click **"Join another table"** next to the right table slot.
-2. Select the **Mapping** source.
-3. Included fields: check `PropertyID`, `PropertyName`, `Owner`, `Tier`, `Vertical`.
-
-**Join condition:**
-1. Under "Join conditions", set the left key to **GA4_Data.PropertyID** and
-   the right key to **Mapping.PropertyID**.
-2. Leave join type as **Left outer** (keeps all GA4_Data rows even if a property
-   has no mapping row yet).
-
-**Name and save:**
-1. In the blend name field (top), type **GA4 + Client Info**.
-2. Click **Save**.
-3. Close the blend panel.
+### 1.5 Close the data sources panel.
 
 ---
 
-## Part 3 — Set field types in the blend
+## Part 2 — Create the GA4 + Registry blend
 
-1. Click **Resource → Manage added data sources**.
-2. Click **Edit** next to **GA4 + Client Info**.
-3. Set these field types and aggregations:
+The blend joins GA4_Data (metrics) with Site Registry Master (Owner, Category,
+Priority) on PropertyID.
+
+1. Click **Resource → Manage blends → Add a blend**.
+2. **Left table**: GA4_Data.
+   - Include fields: `PropertyID`, `Date`, `Users`, `Sessions`, `Conversions`.
+3. **Join another table** → right table: Site Registry Master.
+   - Include fields: `GA4_Property_ID`, `Site_Name`, `Owner`, `Category`, `Priority`, `Site_URL`.
+4. **Join condition**: `GA4_Data.PropertyID = Site Registry Master.GA4_Property_ID`.
+5. **Join type**: Left outer (keeps all GA4 rows).
+6. Name the blend **GA4 + Registry**.
+7. Click **Save**.
+
+### Set field types in the blend
+
+1. **Resource → Manage added data sources → Edit** (GA4 + Registry).
+2. Set aggregations:
 
    | Field         | Type    | Aggregation |
    |---------------|---------|-------------|
    | Date          | Date    | —           |
    | PropertyID    | Text    | —           |
-   | PropertyName  | Text    | —           |
+   | Site_Name     | Text    | —           |
+   | Site_URL      | Text    | —           |
    | Owner         | Text    | —           |
-   | Tier          | Text    | —           |
-   | Vertical      | Text    | —           |
+   | Category      | Text    | —           |
+   | Priority      | Text    | —           |
    | Users         | Number  | Sum         |
    | Sessions      | Number  | Sum         |
    | Conversions   | Number  | Sum         |
 
-4. Click **Done**, then close the panel.
+3. Click **Done**.
 
 ---
 
-## Part 4 — Dashboard layout
+## Part 3 — Page 1: Executive Summary
 
-The canvas is now blank. Build from top to bottom.
+In Looker Studio, click **Add page** (bottom left) and name it **Executive Summary**.
 
-### 4.1 Add a title
+### Header row
 
-1. Click **Insert → Text**.
-2. Draw a wide text box at the top.
-3. Type **Client Analytics Hub**.
-4. Use the Style panel (right side) to set a large bold font.
+**Title text box:**
+1. Insert → Text → draw a wide box at the top.
+2. Type **Client Analytics Hub**.
+3. Style: large bold font, centered.
 
-### 4.2 Date range control
+**Date range control:**
+1. Insert → Date range control.
+2. Draw top-right. Data source: **GA4 + Registry**. Default: **Last 30 days**.
 
-1. Click **Insert → Date range control**.
-2. Draw it in the top-right area.
-3. In the **Setup** panel (right side):
-   - Data source: **GA4 + Client Info**
-   - Default date range: **Last 30 days** (or your preference)
+**Owner filter:**
+1. Insert → Filter control. Draw beside date range.
+2. Data source: GA4 + Registry. Control field: **Owner**. Show search: on.
 
-### 4.3 Filter controls — Owner, Tier, Vertical
+**Tier / Priority filter:**
+1. Repeat for **Priority**.
 
-Repeat three times (one for each dimension):
+**Vertical / Category filter:**
+1. Repeat for **Category**.
 
-1. Click **Insert → Filter control**.
-2. Draw a narrow dropdown below the date range.
-3. In the **Setup** panel:
-   - Data source: **GA4 + Client Info**
-   - Control field: **Owner** (then repeat for **Tier** and **Vertical**)
-4. In the **Style** panel, check **"Show search"** — helpful with ~300 owners.
-5. Label each control (double-click to edit the header text).
+### Scorecard row (KPIs)
 
-### 4.4 Scorecard headline metrics
+Add three scorecards side-by-side:
 
-1. Click **Insert → Scorecard**.
-2. Draw a wide-but-short box.
-3. In **Setup**:
-   - Data source: **GA4 + Client Info**
-   - Metric: **Users**
-4. In **Style**, set a large compact number.
-5. Copy–paste the scorecard twice; change the metric to **Sessions** and
-   **Conversions** respectively.
-6. Arrange the three scorecards side-by-side.
+| Scorecard | Metric | Label |
+|-----------|--------|-------|
+| 1 | Sessions (SUM) | Total Sessions |
+| 2 | Users (SUM) | Total User-Days* |
+| 3 | Conversions (SUM) | Total Conversions |
 
-> **Note on "Users":** This metric sums daily user counts across the selected
-> date range, so a visitor who returns on three different days is counted three
-> times. It measures traffic volume, not unique persons. Sessions and Conversions
-> sum cleanly. Consider labelling the scorecard "Total User-Days" to avoid
-> confusion.
+*Add a text note below scorecards: "User-Days = sum of daily user counts; repeat
+visitors across days are counted multiple times. Sessions and Conversions sum cleanly."
 
-### 4.5 Roll-up tables
+Steps for each scorecard:
+1. Insert → Scorecard.
+2. Setup panel: Data source = GA4 + Registry. Metric = [see table above].
+3. Style panel: compact number format, large font.
 
-Add three tables, one per roll-up dimension. For each:
+### Roll-up tables
 
-1. Click **Insert → Table**.
-2. Draw a tall-ish box.
-3. In **Setup**:
-   - Data source: **GA4 + Client Info**
-   - Dimension: see below
-   - Metrics: **Users**, **Sessions**, **Conversions** (click **+ Add metric** twice)
-   - Default sort: **Sessions** Descending
-4. In **Style**, check **"Row numbers"** and **"Show pagination"** if needed.
+Add three tables below the scorecards:
 
-Table configurations:
+**Table 1 — By Owner:**
+1. Insert → Table.
+2. Dimension: Owner. Metrics: Sessions, Users, Conversions.
+3. Sort by Sessions descending. Enable row numbers.
 
-| Table | Dimension | Purpose |
-|-------|-----------|---------|
-| 1     | Tier      | Roll-up by tier (Legacy / Tier 1 / 2 / 3) |
-| 2     | Vertical  | Roll-up by vertical (Storable / EasyStorage) |
-| 3     | Owner     | Roll-up by person (Gaurav / Abhijeet / Praful / Me) |
+**Table 2 — By Priority (Tier):**
+1. Same setup. Dimension: Priority.
 
-Arrange these three tables side-by-side below the scorecards.
+**Table 3 — By Category (Vertical):**
+1. Same setup. Dimension: Category.
 
-### 4.6 (Optional) Sessions trend — time series
+Arrange the three tables side-by-side.
 
-1. Click **Insert → Time series**.
-2. Draw a wide chart below the roll-up tables.
-3. In **Setup**:
-   - Data source: **GA4 + Client Info**
-   - Dimension: **Date**
-   - Metric: **Sessions**
-4. The date range control at the top will drive this chart automatically.
+### Sessions trend chart (optional)
 
-### 4.7 (Optional) Per-site detail table
-
-1. Click **Insert → Table**.
-2. In **Setup**:
-   - Data source: **GA4 + Client Info**
-   - Dimension: **PropertyName**
-   - Metrics: **Users**, **Sessions**, **Conversions**
-   - Default sort: **Sessions** Descending
-3. In **Style**, enable **"Show pagination"** (900 rows benefits from pages of 25).
+1. Insert → Time series.
+2. Dimension: Date. Metric: Sessions.
+3. Resize to span the full width below the tables.
 
 ---
 
-## Part 5 — Make the controls affect all charts
+## Part 4 — Page 2: Individual Performance
 
-By default Looker Studio date-range controls and filter controls only affect
-charts on the same page. Verify each chart responds:
+Add a new page and name it **Individual Performance**.
 
-1. Click a chart.
-2. In the **Setup** panel, scroll down to **"Filter interaction"** and make sure
-   **"Cross-filter"** or the filter control is not excluded.
-3. For the date range: each chart's date dimension must be the `Date` field from
-   the blend (not a text field).
+1. Copy the header controls (date range + filters) from Page 1:
+   Right-click each → Copy → switch to Page 2 → Paste.
 
-If a chart ignores the date control, click the chart → Setup → Date Range
-Dimension → set it to **Date**.
+### Site detail table
 
----
+1. Insert → Table.
+2. Data source: GA4 + Registry.
+3. Dimensions: Site_Name, Owner, Priority, Category.
+4. Metrics: Sessions, Users, Conversions.
+5. Sort: Sessions Descending.
+6. Style: enable **Pagination** (25 rows per page).
 
-## Part 6 — Share the dashboard
+### Bar chart — Top 20 sites by Sessions
 
-1. Click **Share** (top-right of Looker Studio).
-2. Under **"Manage access"**, set to **"Anyone with the link — Viewer"** or
-   share with specific email addresses.
-3. Copy the link and send it to Gaurav, Abhijeet, and the VP.
-
-Viewers can use all the filters and date controls without editing the report.
-
----
-
-## Refresh cadence
-
-The underlying Google Sheet is refreshed once per day (the Apps Script finishes
-a full pass of all ~900 properties across multiple 15-min chunks). Looker Studio
-caches data for up to 12 hours by default.
-
-To force an immediate data refresh in Looker Studio:
-- Click **Resource → Manage added data sources → Edit** on the GA4_Data source
-  → click the **Refresh fields** button → Done.
-
-Or simply wait — daily data is sufficient for this use case.
+1. Insert → Bar chart.
+2. Data source: GA4 + Registry.
+3. Dimension: Site_Name.
+4. Metric: Sessions.
+5. Sort: Sessions Descending. Limit rows to 20.
 
 ---
 
-## Quick-reference: field cheat-sheet
+## Part 5 — Page 3: Alert Center
 
-| Blend field   | Comes from  | Use as    | Aggregation |
-|---------------|-------------|-----------|-------------|
-| Date          | GA4_Data    | Dimension | —           |
-| PropertyID    | GA4_Data    | Dimension | —           |
-| PropertyName  | Mapping     | Dimension | —           |
-| Owner         | Mapping     | Dimension | —           |
-| Tier          | Mapping     | Dimension | —           |
-| Vertical      | Mapping     | Dimension | —           |
-| Users         | GA4_Data    | Metric    | SUM         |
-| Sessions      | GA4_Data    | Metric    | SUM         |
-| Conversions   | GA4_Data    | Metric    | SUM         |
+Add a new page and name it **Alert Center**.
+
+### Alert summary scorecards
+
+Add four scorecards using the **Alerts Log** data source:
+
+| Scorecard | Metric | Filter |
+|-----------|--------|--------|
+| Open Critical | Record Count | Severity = Critical AND Status = Open |
+| Open Warnings | Record Count | Severity = Warning AND Status = Open |
+| Total This Week | Record Count | Date range: last 7 days |
+| Resolved | Record Count | Status = Resolved |
+
+To apply a filter per scorecard:
+1. Click the scorecard → Setup panel → scroll to **Filter** → **Add a filter**.
+2. Create a new filter with the condition above.
+
+### Alert type filter
+
+1. Insert → Filter control. Control field: **Alert_Type** (Alerts Log source).
+
+### Severity filter
+
+1. Insert → Filter control. Control field: **Severity**.
+
+### Alerts detail table
+
+1. Insert → Table. Data source: **Alerts Log**.
+2. Dimensions: Timestamp, Site_URL, Alert_Type, Severity, Issue_Description,
+   Assigned_To, Status.
+3. Sort: Timestamp Descending.
+4. Pagination: on (25 rows per page).
+5. Conditional formatting on Severity:
+   - Severity = Critical → background red
+   - Severity = Warning  → background yellow
+
+To add conditional formatting:
+1. Select the Severity column in the table.
+2. Style panel → Conditional formatting → Add rule.
+
+---
+
+## Part 6 — Page 4: Technical Health
+
+Add a new page and name it **Technical Health**.
+
+### Site-down summary (from Alerts Log)
+
+1. Insert → Table. Data source: Alerts Log.
+2. Filter the chart: Alert_Type IN (SITE_DOWN, SITE_DEGRADED, SSL_EXPIRY, SLOW_RESPONSE).
+3. Dimensions: Timestamp, Site_URL, Alert_Type, Severity, Issue_Description.
+4. Sort: Timestamp Descending.
+
+### SSL expiry countdown chart
+
+1. Insert → Table. Data source: Alerts Log.
+2. Filter: Alert_Type = SSL_EXPIRY.
+3. Dimensions: Site_URL, Metric_Value (days remaining), Timestamp.
+4. Sort: Metric_Value Ascending (soonest expiry first).
+
+### Uptime alert trend (optional)
+
+1. Insert → Time series. Data source: Alerts Log.
+2. Dimension: Timestamp (date).
+3. Metric: Record Count.
+4. Filter: Alert_Type = SITE_DOWN.
+
+---
+
+## Part 7 — Share the dashboard
+
+1. Click **Share** (top-right).
+2. Set access to **"Anyone with the link — Viewer"** for the manager.
+3. Or share with specific email addresses for tighter control.
+
+Viewers can use all filters and date controls without edit access.
+
+---
+
+## Part 8 — Scheduled PDF delivery (Monday 9 AM)
+
+Looker Studio can email a scheduled PDF report automatically.
+
+1. In your report, click **Share → Schedule email delivery**.
+2. Recipients: manager's email address.
+3. Schedule: **Weekly → Monday → 9:00 AM** (or your manager's timezone).
+4. Report pages to include: select **Executive Summary** and **Alert Center**.
+5. Click **Save**.
+
+The manager receives a PDF snapshot every Monday without any manual steps.
+
+---
+
+## Data refresh notes
+
+- **GA4_Data** sheet is refreshed continuously by `pullChunk()` (every 15 min).
+- **Alerts Log** is updated daily at 8 AM and again on Mondays at 9 AM.
+- Looker Studio caches data for up to 12 hours by default.
+- To force a Looker Studio refresh: Resource → Manage data sources → Edit → Refresh fields.
+
+---
+
+## Quick field reference
+
+| Blend field   | Source             | Type   | Agg |
+|---------------|--------------------|--------|-----|
+| Date          | GA4_Data           | Date   | —   |
+| PropertyID    | GA4_Data           | Text   | —   |
+| Site_Name     | Site Registry Master | Text | —   |
+| Site_URL      | Site Registry Master | Text | —   |
+| Owner         | Site Registry Master | Text | —   |
+| Category      | Site Registry Master | Text | —   |
+| Priority      | Site Registry Master | Text | —   |
+| Users         | GA4_Data           | Number | SUM |
+| Sessions      | GA4_Data           | Number | SUM |
+| Conversions   | GA4_Data           | Number | SUM |
 
 **Conversions** = what GA4 calls "Key Events" in its UI. The Data API metric
 name is still `conversions` — that is correct and what the script uses.

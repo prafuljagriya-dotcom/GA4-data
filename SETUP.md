@@ -1,216 +1,267 @@
-# Client Analytics Hub — Setup Guide
+# GA4 Monitor — Complete Setup Guide
 
-One Google Sheet + one Apps Script pulls daily GA4 metrics (Users, Sessions,
-Conversions) for all ~900 client properties into a single sheet. Looker Studio
-reads that sheet and renders the manager dashboard. No service account needed —
-the script runs as Praful's login and reuses the GA4 access he already has.
+An automated monitoring system built on Google Apps Script that:
+- Pulls daily GA4 metrics for all sites under your Google account (~500 properties)
+- Compares 7-day and 30-day periods and fires alerts when traffic drops
+- Integrates with UptimeRobot for site-down and SSL expiry detection
+- Sends Critical alerts via email and Slack; weekly PDF-ready summaries every Monday
+
+**No service account required** — the script runs as your logged-in Google account,
+reusing the GA4 access you already have.
 
 ---
 
-## What you need before starting
+## Prerequisites
 
-- Praful's Google account (already has viewer access to all ~900 GA4 properties)
-- A Monday.com board export as a spreadsheet with columns:
-  `Client | Owner | Tier | Vertical`
-- About 15 minutes of browser work, then the system runs itself
+- Praful's Google account (already has access to all GA4 properties)
+- A Slack workspace with permission to add incoming webhooks (free)
+- A UptimeRobot free account with your sites already added (optional but recommended)
+- About 30 minutes of browser work — then the system runs itself
 
 ---
 
 ## Step 1 — Create the Google Sheet
 
-1. Open [Google Sheets](https://sheets.google.com) signed in as Praful.
+1. Open [sheets.google.com](https://sheets.google.com) signed in as Praful.
 2. Click **Blank spreadsheet**.
 3. Rename it **Client Analytics Hub** (click the title at top-left).
-4. Create three tabs by clicking the **+** at the bottom-left three times and
-   rename them exactly (case-sensitive):
+4. Click **+** at the bottom seven times and rename the seven new tabs **exactly**:
    - `GA4_Data`
    - `Mapping`
    - `Monday`
-5. Copy the URL of the spreadsheet — you will need the ID later
-   (the long string between `/d/` and `/edit` in the URL).
+   - `Site Registry Master`
+   - `Alert Configuration`
+   - `Alerts Log`
+   - `Performance Metrics`
+   - `Error Log`
+
+   > Tip: Google Sheets lets you double-click a tab to rename it.
 
 ---
 
 ## Step 2 — Open the Apps Script editor
 
 1. With the spreadsheet open, click **Extensions → Apps Script**.
-   A new browser tab opens showing the script editor.
-2. On the left sidebar, you will see a default file called `Code.gs`.
-   Click on it.
-3. **Select all** the placeholder code in the editor (`Ctrl+A` / `Cmd+A`)
-   and **delete** it.
+2. A new tab opens showing the editor.
 
 ---
 
-## Step 3 — Paste the script
+## Step 3 — Add all script files
 
-1. Open `apps-script/Code.gs` from this repository.
-2. Copy the entire contents.
-3. Paste it into the Apps Script editor (the blank area).
-4. Click **Save** (the floppy-disk icon, or `Ctrl+S` / `Cmd+S`).
-   The project name will show as "Untitled project" — rename it to
-   **GA4 Dashboard** by clicking that text at the top.
+You need to add **eight module files** plus update the manifest. Do this once:
+
+### 3a — Update the manifest (appsscript.json)
+
+1. In the editor, click the gear icon (**Project Settings**) on the left sidebar.
+2. Check **"Show appsscript.json manifest file in editor"**.
+3. Go back to the **Editor** view (the `</>` icon).
+4. Click `appsscript.json` in the file list.
+5. Replace the entire contents with the contents of `apps-script/appsscript.json`
+   from this repository.
+6. Save (`Ctrl+S` / `Cmd+S`).
+
+### 3b — Add module files
+
+For each file below, in the Apps Script editor:
+1. Click **+** next to "Files" in the left sidebar → "Script".
+2. Name it exactly as shown (without `.gs`).
+3. Select all placeholder code in the new file (`Ctrl+A`) and delete it.
+4. Paste the full contents from the corresponding file in `apps-script/`.
+
+Files to add (in order):
+- `00_Config`   → paste from `apps-script/00_Config.gs`
+- `01_SheetUtils` → paste from `apps-script/01_SheetUtils.gs`
+- `02_GA4Fetcher` → paste from `apps-script/02_GA4Fetcher.gs`
+- `03_AlertEngine` → paste from `apps-script/03_AlertEngine.gs`
+- `04_UptimeMonitor` → paste from `apps-script/04_UptimeMonitor.gs`
+- `05_NotificationDispatcher` → paste from `apps-script/05_NotificationDispatcher.gs`
+- `06_ErrorHandler` → paste from `apps-script/06_ErrorHandler.gs`
+- `07_Main`     → paste from `apps-script/07_Main.gs`
+
+5. Replace the default `Code.gs` content with the contents of `apps-script/Code.gs`
+   (it's just a comment — the real code is in the numbered files).
+
+6. Save the project. Name it **GA4 Monitor** (click "Untitled project" at the top).
+
+> **Alternative — use clasp:** If you have Node.js installed locally, you can push
+> all files in one command:
+> ```bash
+> npm install -g @google/clasp
+> clasp login
+> # Create the Apps Script project first in the editor, then:
+> clasp clone <SCRIPT_ID>
+> # Copy all apps-script/*.gs files into the cloned directory, then:
+> clasp push
+> ```
 
 ---
 
-## Step 4 — Enable the two Advanced Services
+## Step 4 — Enable Advanced Services
 
-The script uses two APIs that must be explicitly enabled:
+1. In the Apps Script editor, click **+** next to **Services** (left sidebar).
+2. Search **Google Analytics Data API** → select it → identifier: `AnalyticsData` → **Add**.
+3. Click **+** again → search **Google Analytics Admin API** → identifier: `AnalyticsAdmin` → **Add**.
 
-1. In the Apps Script editor, click the **+** next to **Services** in the
-   left sidebar.
-2. Search for **Google Analytics Data API** — select it, leave the identifier
-   as `AnalyticsData`, click **Add**.
-3. Click **+** again, search for **Google Analytics Admin API** — select it,
-   leave the identifier as `AnalyticsAdmin`, click **Add**.
-
-Both services now appear in the Services list.
-
-> **If you see a Cloud project warning:** Apps Script may ask you to switch to
-> a standard Cloud project. Click "Change project", create a new project in
-> Google Cloud Console, and link it. Then enable both APIs in that Cloud project
-> via **APIs & Services → Library**.
+Both now appear in the Services list.
 
 ---
 
 ## Step 5 — Authorise the script (one-time OAuth)
 
-1. In the editor, select the function `listAllProperties` from the dropdown
-   next to the Run button (▶).
-2. Click **Run (▶)**.
-3. A dialog appears: **"Authorization required"** → click **Review permissions**.
+1. In the function dropdown (top of editor), select `initAllSheets`.
+2. Click **Run ▶**.
+3. **"Authorization required"** dialog → click **Review permissions**.
 4. Choose Praful's Google account.
-5. You will see **"Google hasn't verified this app"** — this is expected because
-   it is a personal script. Click **Advanced → Go to GA4 Dashboard (unsafe)**.
-6. Review the permissions (read Google Analytics data, edit this spreadsheet,
-   manage triggers) → click **Allow**.
+5. **"Google hasn't verified this app"** warning appears — this is expected for
+   personal scripts. Click **Advanced → Go to GA4 Monitor (unsafe)**.
+6. Review the six permission scopes and click **Allow**.
 
-The script runs. A dialog will appear saying how many GA4 properties were found.
-
----
-
-## Step 6 — Check the Mapping tab
-
-Open the spreadsheet (switch back to the Sheets tab). The **Mapping** tab should
-now have rows like:
-
-| PropertyID | PropertyName           | Client | Owner | Tier | Vertical |
-|------------|------------------------|--------|-------|------|----------|
-| 123456789  | Flynn Avenue Self Stor |        |       |      |          |
-| 987654321  | Acme Storage           |        |       |      |          |
-
-Columns A–B are filled. Columns C–F are blank and will be populated in Step 8.
+The script runs. A dialog will confirm all sheets have been initialised.
 
 ---
 
-## Step 7 — Paste the Monday.com export
+## Step 6 — List all GA4 properties
 
-1. Export your Monday.com board to a spreadsheet (CSV or direct copy-paste).
-   Required columns in this exact order:
-   ```
-   Client | Owner | Tier | Vertical
-   ```
-   Example rows:
-   ```
-   Flynn Avenue Self Storage | Gaurav  | Tier 2  | Storable
-   Acme Storage              | Abhijeet| Legacy  | EasyStorage
-   ```
-2. Click the **Monday** tab in the Google Sheet.
-3. Paste your data starting at **cell A1**, with the header row as the first row.
+1. Switch back to the **Google Sheet** tab (refresh if the GA4 Monitor menu is
+   not yet visible).
+2. Click **GA4 Monitor → 1 — List all GA4 properties → Mapping tab**.
+3. A dialog will confirm how many properties were found.
+
+The **Mapping** tab now has every GA4 property ID and display name in columns A–B.
+Columns C–F remain blank for the XLOOKUP formulas (Step 8).
 
 ---
 
-## Step 8 — Add XLOOKUP formulas in the Mapping tab
+## Step 7 — Populate the Site Registry Master
 
-These formulas look up each property name in the Monday tab and fill in
-Owner, Tier, and Vertical automatically.
+The alert engine reads from **Site Registry Master**, not from Mapping. You need
+one row per site with at minimum a `Site_URL` and `GA4_Property_ID`.
 
-1. Click the **Mapping** tab.
-2. Click cell **D2** and paste:
+**Option A — Import from Mapping (fastest):**
+In a blank cell elsewhere, use this array formula to auto-fill from Mapping:
+```
+=ARRAYFORMULA(IF(Mapping!A2:A<>"", Mapping!A2:A, ""))
+```
+Then fill columns B (PropertyID from Mapping column A), C (Site_Name from Mapping B),
+and set Owner/Category/Priority/Status/Date_Added manually.
+
+**Option B — Paste from Monday.com:**
+1. Export your Monday.com board to CSV/spreadsheet with columns:
+   `Client | Owner | Tier | Vertical`
+2. Paste into the **Monday** tab (header in row 1).
+3. Use XLOOKUP to match Mapping data into Site Registry Master.
+
+**Required columns in Site Registry Master:**
+| Column | Example |
+|--------|---------|
+| Site_URL | https://flynnave.com |
+| GA4_Property_ID | 123456789 |
+| Site_Name | Flynn Avenue Self Storage |
+| Owner | Gaurav |
+| Category | Self Storage |
+| Priority | Tier 2 |
+| Status | Active |
+| Date_Added | 2026-06-30 |
+| Notes | (optional) |
+
+Set `Status = Inactive` for any site you want to exclude from monitoring.
+
+---
+
+## Step 8 — Add XLOOKUP formulas in Mapping tab
+
+After pasting Monday export into the Monday tab
+(`Client | Owner | Tier | Vertical` in columns A–D):
+
+1. Click **Mapping** tab → cell **D2** → paste:
    ```
    =IFERROR(XLOOKUP($B2,Monday!$A:$A,Monday!$B:$B),"")
    ```
-3. Click cell **E2** and paste:
+2. Cell **E2** → paste:
    ```
    =IFERROR(XLOOKUP($B2,Monday!$A:$A,Monday!$C:$C),"")
    ```
-4. Click cell **F2** and paste:
+3. Cell **F2** → paste:
    ```
    =IFERROR(XLOOKUP($B2,Monday!$A:$A,Monday!$D:$D),"")
    ```
-5. Select **D2:F2**, then drag the fill handle (small square at the bottom-right
-   of the selection) **all the way down** to the last row in the Mapping tab.
+4. Select **D2:F2** and drag the fill handle to the last row of Mapping.
 
-Rows where the GA4 property name does not exactly match a Monday client name
-will show blank Owner/Tier/Vertical. Scan the sheet for blanks and fill them in
-manually — they typically differ only in punctuation or abbreviation.
+Blank cells = name didn't match exactly — fill those in manually.
 
 ---
 
-## Step 9 — Set up the automatic trigger
+## Step 9 — Set sensitive configuration values
 
-1. Go back to the Apps Script editor tab.
-2. In the spreadsheet, a new menu **GA4 Dashboard** has appeared in the menu bar.
-   (If not, refresh the spreadsheet tab.)
-3. Click **GA4 Dashboard → Step 2 — Create 15-min auto-trigger**.
-4. Click **Allow** in the authorization dialog if it appears.
-5. A confirmation dialog appears — click **OK**.
+These are stored encrypted in ScriptProperties, never in the script code.
 
-The trigger is now active. Every 15 minutes, `pullChunk()` will process a batch
-of properties and write rows into the GA4_Data tab. Because there are ~900
-properties and each API call takes ~0.3 s, a full pass takes approximately
-4–6 hours the first time.
+**Slack webhook:**
+1. In Slack: open your workspace → **Apps → Incoming Webhooks → Add to Slack**.
+2. Choose the channel for alerts → copy the webhook URL.
+3. In the Sheet: **GA4 Monitor → 2a — Set Slack webhook URL** → paste URL → OK.
 
----
+**Alert email:**
+1. **GA4 Monitor → 2b — Set alert email address** → enter email → OK.
 
-## Step 10 — Kick off the first pull right now
-
-You do not need to wait for the next scheduled run:
-
-1. Click **GA4 Dashboard → Pull data now (single chunk)**.
-2. Switch to the **GA4_Data** tab — rows will start appearing within ~30 seconds.
-
-To watch progress, check **Execution log** in the Apps Script editor
-(View → Executions).
+**UptimeRobot API key (optional but strongly recommended):**
+1. Log in to [uptimerobot.com](https://uptimerobot.com) → **My Settings → API Settings**.
+2. Copy your **Main API Key**.
+3. **GA4 Monitor → 2c — Set UptimeRobot API key** → paste key → OK.
 
 ---
 
-## Step 11 — Build the Looker Studio dashboard
+## Step 10 — Create triggers
 
-See **LOOKER_STUDIO.md** for step-by-step instructions.
+1. **GA4 Monitor → 3 — Create all triggers**.
+2. A confirmation dialog lists the three triggers created:
+   - `pullChunk` — every 15 min (raw GA4 data into GA4_Data tab)
+   - `dailyCheck` — daily at 8 AM (7-day alert comparison + uptime check)
+   - `weeklyCheck` — Mondays at 9 AM (30-day comparison + weekly email)
 
 ---
 
-## Maintenance
+## Step 11 — Kick off the first run
 
-| Task | How |
-|------|-----|
-| Force a fresh pull of all properties | **GA4 Dashboard → Force full refresh** |
-| A new client was added | Re-run **Step 1 — List all GA4 properties**, then re-apply XLOOKUP formulas |
-| Monday data changed (new owner, tier) | Paste updated Monday export into the Monday tab — XLOOKUPs auto-refresh |
-| Data looks stale | Check **Apps Script → Executions** for errors; run **Pull data now** manually |
-| Change lookback window | Edit `LOOKBACK_DAYS` at top of `Code.gs` (default: 90) |
+1. **GA4 Monitor → Pull raw GA4 data NOW** — starts filling GA4_Data immediately.
+2. **GA4 Monitor → Run daily alert check NOW** — runs the first 7-day comparison.
+   The Alerts Log tab will start showing results for any sites with significant drops.
+
+The first full pass of all properties takes 4–8 hours across multiple 15-min chunks.
+Watch **Extensions → Apps Script → Executions** for live progress.
+
+---
+
+## Step 12 — Build the Looker Studio dashboard
+
+See **LOOKER_STUDIO.md** for the 4-view dashboard build guide.
+
+---
+
+## Alert threshold customisation
+
+Edit values directly in the **Alert Configuration** tab:
+
+| Column | Description |
+|--------|-------------|
+| Metric_Name | `sessions`, `totalUsers`, `newUsers`, `engagementRate`, `conversions` |
+| Comparison_Window | `7d` or `30d` |
+| Threshold_Percent | e.g., `-20` means alert if metric drops ≥20% |
+| Severity | `Critical`, `Warning`, or `Info` |
+| Notification_Method | `Email+Slack`, `Slack`, or `Email` |
+| Active | `TRUE` or `FALSE` |
+
+Changes take effect on the next `dailyCheck` or `weeklyCheck` run.
 
 ---
 
 ## Troubleshooting
 
-**"Exception: No Item with the given ID was found"**
-The property was deleted or Praful's account lost access. The script logs it and
-skips it — this is expected for a small number of properties.
-
-**"You do not have permission to call AnalyticsAdmin"**
-The Advanced Services were not enabled correctly. Return to Step 4.
-
-**"Exception: Script timeout"**
-Normal — the script intentionally stops before the 6-minute Apps Script limit
-and resumes at the next trigger run. Not an error.
-
-**Mapping tab shows all-blank Owner/Tier/Vertical**
-The Monday tab is empty or column order is wrong. Check that Monday!A = Client,
-B = Owner, C = Tier, D = Vertical with a header in row 1.
-
-**The GA4 Dashboard menu does not appear**
-Refresh the spreadsheet tab. If it still does not appear, the `onOpen` trigger
-may need re-authorization — open Extensions → Apps Script and run `onOpen`
-manually once.
+| Symptom | Fix |
+|---------|-----|
+| GA4 Monitor menu missing | Refresh the spreadsheet tab; if still missing, open Apps Script and run `onOpen()` manually |
+| "Advanced service AnalyticsData not enabled" | Return to Step 4 |
+| "Exception: Script timeout" | Normal — script stops before the 6-min limit and resumes next trigger run |
+| Alerts Log empty after dailyCheck | Check Error Log tab for API errors; run "Pull raw GA4 data NOW" to verify connectivity |
+| Slack not receiving messages | Verify webhook URL in GA4 Monitor menu; test manually with `curl` |
+| "No Item with given ID" error for a property | That property was deleted or access was removed — script skips it and logs the error |
+| Alert Configuration shows no matching rules | Ensure the `Active` column is `TRUE` (not text "true") |
