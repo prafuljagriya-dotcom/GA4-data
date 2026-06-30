@@ -7,6 +7,98 @@
 //                               used by the alert engine)
 // =============================================================================
 
+// ── grantViewerAccessToAll ────────────────────────────────────────────────────
+// ONE-TIME SETUP HELPER.
+// Iterates every GA4 property visible to the CURRENT logged-in account and adds
+// TARGET_EMAIL as a Viewer on any property where it doesn't already have access.
+//
+// Run this from each team member's Apps Script login (Gaurav, Abhijeet, etc.)
+// so all their properties become visible under a single account (Praful's).
+//
+// How to run:
+//   1. Open the Apps Script editor logged in as the team member.
+//   2. Set TARGET_EMAIL below to Praful's Google account email.
+//   3. Select grantViewerAccessToAll in the function dropdown → Run.
+//   4. Approve the OAuth prompt (needs analytics.manage.users scope).
+//   5. Check the "Access Grant Log" sheet for a summary.
+//
+// Requires the current user to be Editor or Admin on each GA4 account.
+// Properties where the current user is only a Viewer are skipped (can't grant).
+
+var TARGET_EMAIL = 'praful@yourdomain.com'; // <-- CHANGE THIS before running
+
+function grantViewerAccessToAll() {
+  var ss      = getSS();
+  var logSh   = getOrCreateSheet('Access Grant Log');
+  if (logSh.getLastRow() === 0) {
+    logSh.getRange(1, 1, 1, 5)
+      .setValues([['Timestamp','PropertyID','PropertyName','Result','Detail']]);
+  }
+
+  var granted = 0, skipped = 0, failed = 0;
+  var logRows = [];
+  var pageToken = null;
+
+  do {
+    var params = { pageSize: 200 };
+    if (pageToken) params.pageToken = pageToken;
+    var page = AnalyticsAdmin.AccountSummaries.list(params);
+
+    (page.accountSummaries || []).forEach(function(acct) {
+      (acct.propertySummaries || []).forEach(function(p) {
+        var propertyId   = String(p.property);          // "properties/123456"
+        var propertyName = p.displayName || propertyId;
+        var numericId    = propertyId.split('/').pop();
+
+        try {
+          // Check if TARGET_EMAIL already has access
+          var existing = AnalyticsAdmin.Properties.AccessBindings.list(propertyId);
+          var alreadyHasAccess = (existing.accessBindings || []).some(function(b) {
+            return b.user === TARGET_EMAIL;
+          });
+
+          if (alreadyHasAccess) {
+            skipped++;
+            logRows.push([new Date(), numericId, propertyName, 'SKIPPED', 'Already has access']);
+            return;
+          }
+
+          // Grant Viewer access
+          AnalyticsAdmin.Properties.AccessBindings.create(
+            {
+              user:       TARGET_EMAIL,
+              roles:      ['predefinedRoles/viewer']
+            },
+            propertyId
+          );
+          granted++;
+          logRows.push([new Date(), numericId, propertyName, 'GRANTED', 'Viewer access added']);
+
+        } catch (e) {
+          failed++;
+          logRows.push([new Date(), numericId, propertyName, 'FAILED',
+            e.message.length > 200 ? e.message.slice(0, 200) : e.message]);
+        }
+      });
+    });
+
+    pageToken = page.nextPageToken || null;
+  } while (pageToken);
+
+  if (logRows.length > 0) {
+    logSh.getRange(logSh.getLastRow() + 1, 1, logRows.length, logRows[0].length)
+      .setValues(logRows);
+  }
+
+  SpreadsheetApp.getUi().alert(
+    'Access grant complete.\n\n' +
+    'Granted : ' + granted + '\n' +
+    'Skipped (already had access): ' + skipped + '\n' +
+    'Failed  : ' + failed + '\n\n' +
+    'Details written to the "Access Grant Log" tab.'
+  );
+}
+
 // ── listAllProperties ─────────────────────────────────────────────────────────
 // RUN ONCE. Pages through all GA4 properties visible under the logged-in Google
 // account via the Admin API and writes PropertyID + DisplayName into Mapping.

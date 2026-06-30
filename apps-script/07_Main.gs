@@ -14,6 +14,8 @@ function onOpen() {
     .addItem('2b — Set alert email address',               'promptAlertEmail')
     .addItem('2c — Set UptimeRobot API key',               'promptUptimeKey')
     .addSeparator()
+    .addItem('1b — Grant Praful Viewer access on all properties', 'grantViewerAccessToAll')
+    .addSeparator()
     .addItem('3 — Create all triggers (run once)',         'setupTriggers')
     .addSeparator()
     // ── Manual runs ──
